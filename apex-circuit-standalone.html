@@ -1,0 +1,1355 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"></head><body><title>Apex Circuit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap">
+<style>
+/* Layout concept: full-bleed 3D view, instrument-cluster HUD at the edges, one modal panel for menus.
+   Single dark look on purpose: it is a game screen, so tokens are defined once on :root. */
+:root{
+  --bg:#0a0d12;
+  --panel:rgba(12,16,23,.80);
+  --panel-solid:#121822;
+  --fg:#eef1f6;
+  --muted:#9aa4b5;
+  --accent:#ffb21a;
+  --accent-ink:#1b1303;
+  --hot:#ff4a3d;
+  --good:#38d683;
+  --cyan:#3cd0ff;
+  --line:rgba(255,255,255,.16);
+  --font-display:'Chakra Petch','Arial Narrow',system-ui,sans-serif;
+  --font-body:'Barlow',system-ui,-apple-system,'Segoe UI',sans-serif;
+  color-scheme:dark;
+}
+[hidden]{display:none!important}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--font-body);overflow:hidden;
+  overscroll-behavior:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;touch-action:none}
+#app{position:fixed;inset:0;overflow:hidden;background:var(--bg);--tb:clamp(56px,min(17vh,18vw),96px)}
+#gl{position:absolute;inset:0;width:100%;height:100%;display:block}
+
+/* ---------- HUD ---------- */
+#hud{position:absolute;inset:0;pointer-events:none;font-family:var(--font-display)}
+.hud{position:absolute}
+#hud-tl{left:max(16px,env(safe-area-inset-left));top:max(12px,env(safe-area-inset-top));display:flex;gap:8px;flex-wrap:wrap;max-width:46vw}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:6px 12px 7px;min-width:62px}
+.stat small{display:block;font:600 10px/1 var(--font-display);letter-spacing:.16em;color:var(--muted);text-transform:uppercase;margin-bottom:4px}
+.stat b{display:block;font:700 clamp(20px,4vw,30px)/1 var(--font-display);font-variant-numeric:tabular-nums}
+#hud-tc{left:50%;top:max(12px,env(safe-area-inset-top));transform:translateX(-50%);text-align:center;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:6px 16px 7px;min-width:150px}
+#h-time{font:700 clamp(22px,4.4vw,34px)/1 var(--font-display);font-variant-numeric:tabular-nums;letter-spacing:.02em}
+#h-laps{font:500 12px/1.3 var(--font-display);color:var(--muted);margin-top:4px;font-variant-numeric:tabular-nums;min-height:16px}
+#hud-tr{right:max(16px,env(safe-area-inset-right));top:max(12px,env(safe-area-inset-top));display:flex;flex-direction:column;align-items:flex-end;gap:8px}
+#mini{width:clamp(84px,16vw,128px);height:auto;aspect-ratio:1;background:var(--panel);border:1px solid var(--line);border-radius:6px;display:block}
+.chips{display:flex;gap:6px;pointer-events:auto}
+.chip{font:600 12px/1 var(--font-display);letter-spacing:.1em;text-transform:uppercase;color:var(--fg);background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:9px 11px;cursor:pointer;touch-action:manipulation}
+.chip:hover,.chip:focus-visible{border-color:var(--accent);outline:none}
+#speedo{left:50%;bottom:max(10px,env(safe-area-inset-bottom));transform:translateX(-50%);width:clamp(150px,22vw,210px)}
+#speedo svg{display:block;width:100%;height:auto}
+#sp-bg,#sp-fg{fill:none;stroke-linecap:round;stroke-width:9}
+#sp-bg{stroke:rgba(255,255,255,.14)}
+#sp-fg{stroke:var(--accent);transition:stroke .15s}
+#sp-num{font:700 40px var(--font-display);fill:var(--fg);font-variant-numeric:tabular-nums}
+#sp-unit{font:600 11px var(--font-display);fill:var(--muted);letter-spacing:.2em}
+#msg{position:absolute;left:0;right:0;top:30%;text-align:center;font:700 clamp(64px,16vw,150px)/1 var(--font-display);color:var(--fg);text-shadow:0 4px 24px rgba(0,0,0,.55);pointer-events:none}
+#msg.go{color:var(--good)}
+#toast{position:absolute;left:0;right:0;top:20%;text-align:center;font:700 clamp(20px,4vw,34px)/1.1 var(--font-display);letter-spacing:.12em;text-transform:uppercase;opacity:0;pointer-events:none;text-shadow:0 2px 14px rgba(0,0,0,.6)}
+#toast.show{animation:toast 1.5s ease-out forwards}
+#toast.warn{color:var(--hot)}
+@keyframes toast{0%{opacity:0;transform:translateY(8px)}12%{opacity:1;transform:none}75%{opacity:1}100%{opacity:0}}
+@media (prefers-reduced-motion:reduce){#toast.show{animation:none;opacity:1}}
+
+/* ---------- Touch controls ---------- */
+#touch{position:absolute;inset:0;pointer-events:none;display:none}
+#touch.on{display:block}
+.tbtn{position:absolute;pointer-events:auto;touch-action:none;display:grid;place-items:center;
+  width:var(--tb);height:var(--tb);border-radius:50%;border:2px solid var(--line);background:rgba(12,16,23,.45);
+  color:var(--fg);font:700 13px var(--font-display);letter-spacing:.1em;text-transform:uppercase;cursor:pointer}
+.tbtn svg{width:46%;height:46%;fill:currentColor}
+.tbtn.down{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.tbtn.sm{width:calc(var(--tb)*.74);height:calc(var(--tb)*.74);font-size:11px}
+#t-left{left:max(18px,env(safe-area-inset-left));bottom:max(18px,env(safe-area-inset-bottom))}
+#t-right{left:calc(max(18px,env(safe-area-inset-left)) + var(--tb) + 14px);bottom:max(18px,env(safe-area-inset-bottom))}
+#t-gas{right:max(18px,env(safe-area-inset-right));bottom:max(18px,env(safe-area-inset-bottom));width:calc(var(--tb)*1.2);height:calc(var(--tb)*1.2)}
+#t-brake{right:calc(max(18px,env(safe-area-inset-right)) + var(--tb)*1.2 + 14px);bottom:max(18px,env(safe-area-inset-bottom))}
+#t-hand{right:calc(max(18px,env(safe-area-inset-right)) + var(--tb)*1.2 + 14px);bottom:calc(max(18px,env(safe-area-inset-bottom)) + var(--tb) + 12px)}
+
+/* ---------- Panels ---------- */
+#overlay{position:absolute;inset:0;display:grid;place-items:center;padding:16px;background:rgba(5,8,12,.64)}
+.panel{width:100%;max-width:540px;max-height:100%;overflow:auto;background:var(--panel-solid);border:1px solid var(--line);border-radius:10px;padding:22px 22px 20px;box-sizing:border-box;touch-action:pan-y}
+.panel h1{font:700 clamp(30px,7vw,44px)/1 var(--font-display);letter-spacing:.04em;margin:0 0 4px;text-transform:uppercase}
+.panel h2{font:700 26px/1 var(--font-display);letter-spacing:.06em;margin:0 0 14px;text-transform:uppercase}
+.sub{margin:0 0 16px;color:var(--muted);font-size:14px;line-height:1.45}
+.keys{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;margin:0 0 18px;font-size:14px}
+.keys dt{color:var(--accent);font:600 12px var(--font-display);letter-spacing:.08em;text-transform:uppercase;white-space:nowrap;padding-top:2px}
+.keys dd{margin:0;color:var(--fg)}
+.row{display:flex;gap:10px;flex-wrap:wrap}
+.btn{flex:1 1 140px;font:700 15px/1 var(--font-display);letter-spacing:.1em;text-transform:uppercase;border-radius:8px;border:1px solid var(--line);background:transparent;color:var(--fg);padding:14px 16px;cursor:pointer;touch-action:manipulation}
+.btn:hover,.btn:focus-visible{border-color:var(--accent);outline:none}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.primary:hover,.btn.primary:focus-visible{filter:brightness(1.08)}
+.note{margin:16px 0 0;font-size:12.5px;line-height:1.5;color:var(--muted)}
+.big{font:700 clamp(54px,14vw,84px)/1 var(--font-display);color:var(--accent);margin:2px 0 2px}
+table.laps{width:100%;border-collapse:collapse;margin:10px 0 18px;font:500 15px var(--font-display);font-variant-numeric:tabular-nums}
+table.laps td{padding:7px 0;border-bottom:1px solid var(--line)}
+table.laps td:last-child{text-align:right}
+table.laps tr.best td{color:var(--good)}
+.rot{display:none;margin:0 0 14px;padding:8px 10px;border:1px solid var(--accent);border-radius:6px;font-size:13px;color:var(--accent)}
+@media (pointer:coarse) and (orientation:portrait){.rot{display:block}}
+.fatal{position:absolute;inset:0;display:grid;place-items:center;padding:24px;text-align:center;font-size:16px}
+
+/* ---------- Narrow screens (phones in portrait) ---------- */
+@media (max-width:620px){
+  #hud-tl{max-width:none;gap:6px}
+  .stat{min-width:0;padding:5px 9px 6px}
+  .stat small{font-size:9px;letter-spacing:.12em}
+  .stat b{font-size:20px}
+  #hud-tc{left:max(16px,env(safe-area-inset-left));top:calc(max(12px,env(safe-area-inset-top)) + 58px);transform:none;text-align:left;min-width:0;padding:5px 12px 6px}
+  #h-time{font-size:22px}
+  #mini{width:84px}
+  #speedo{width:130px}
+  .panel{padding:18px 16px 16px}
+}
+@media (pointer:coarse) and (max-aspect-ratio:1/1){
+  #speedo{bottom:calc(max(18px,env(safe-area-inset-bottom)) + var(--tb)*2 + 24px)}
+}
+</style>
+
+<div id="app">
+  <canvas id="gl"></canvas>
+
+  <div id="hud" hidden>
+    <div class="hud" id="hud-tl">
+      <div class="stat"><small>Position</small><b id="h-pos">4/5</b></div>
+      <div class="stat"><small>Lap</small><b id="h-lap">1/3</b></div>
+      <div class="stat"><small>Gate</small><b id="h-cp">0/8</b></div>
+    </div>
+    <div class="hud" id="hud-tc">
+      <div id="h-time">0:00.000</div>
+      <div id="h-laps">&nbsp;</div>
+    </div>
+    <div class="hud" id="hud-tr">
+      <canvas id="mini" width="128" height="128"></canvas>
+      <div class="chips">
+        <button class="chip" id="b-reset" type="button">Reset</button>
+        <button class="chip" id="b-pause" type="button">Pause</button>
+      </div>
+    </div>
+    <div class="hud" id="speedo">
+      <svg viewBox="0 0 140 112" aria-label="Speedometer">
+        <path id="sp-bg" pathLength="100"/>
+        <path id="sp-fg" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100"/>
+        <text id="sp-num" x="70" y="66" text-anchor="middle">0</text>
+        <text id="sp-unit" x="70" y="84" text-anchor="middle">KM/H</text>
+      </svg>
+    </div>
+    <div id="msg"></div>
+    <div id="toast"></div>
+  </div>
+
+  <div id="touch">
+    <button class="tbtn" id="t-left" data-act="left" type="button" aria-label="Steer left"><svg viewBox="0 0 24 24"><path d="M15 4 7 12l8 8V4z"/></svg></button>
+    <button class="tbtn" id="t-right" data-act="right" type="button" aria-label="Steer right"><svg viewBox="0 0 24 24"><path d="m9 4 8 8-8 8V4z"/></svg></button>
+    <button class="tbtn" id="t-gas" data-act="gas" type="button">Gas</button>
+    <button class="tbtn" id="t-brake" data-act="brake" type="button">Brake</button>
+    <button class="tbtn sm" id="t-hand" data-act="hand" type="button">Hand</button>
+  </div>
+
+  <div id="overlay">
+    <section class="panel" id="p-start">
+      <h1>Apex Circuit</h1>
+      <p class="sub">Phase 1 prototype. Three laps against four computer-driven cars on a closed circuit.</p>
+      <p class="rot">Turn your phone sideways for a wider view.</p>
+      <dl class="keys">
+        <dt>W / Up</dt><dd>Accelerate</dd>
+        <dt>S / Down</dt><dd>Brake, then reverse</dd>
+        <dt>A D / Left Right</dt><dd>Steer</dd>
+        <dt>Space</dt><dd>Handbrake (slides the rear)</dd>
+        <dt>R</dt><dd>Reset to the last gate</dd>
+        <dt>Esc / P</dt><dd>Pause</dd>
+        <dt>Touch</dt><dd>On-screen buttons appear on phones and tablets</dd>
+      </dl>
+      <div class="row">
+        <button class="btn primary" id="b-start" type="button">Start race</button>
+        <button class="btn" id="b-touch1" type="button">Touch buttons: off</button>
+      </div>
+      <p class="note">Everything you see is placeholder box geometry, not a realistic car or track. The driving model is arcade style, written to be ported to Godot later.</p>
+    </section>
+
+    <section class="panel" id="p-pause" hidden>
+      <h2>Paused</h2>
+      <div class="row">
+        <button class="btn primary" id="b-resume" type="button">Resume</button>
+        <button class="btn" id="b-restart" type="button">Restart race</button>
+        <button class="btn" id="b-touch2" type="button">Touch buttons: off</button>
+      </div>
+    </section>
+
+    <section class="panel" id="p-results" hidden>
+      <h2>Race finished</h2>
+      <div class="big" id="r-pos">1st</div>
+      <div class="sub" id="r-sub">Total time 0:00.000</div>
+      <table class="laps" id="r-laps"></table>
+      <div class="row">
+        <button class="btn primary" id="b-again" type="button">Race again</button>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+(function () {
+'use strict';
+/* =====================================================================
+   APEX CIRCUIT  -  Phase 1 prototype (HTML/WebGL preview)
+   Sections mirror the planned Godot scripts so each one can be ported:
+     Input     -> res://scripts/input/input_manager.gd
+     Track     -> res://scripts/tracks/track.gd
+     PlayerCar -> res://scripts/vehicles/car.gd
+     ChaseCam  -> res://scripts/camera/chase_camera.gd
+     Race      -> res://scripts/race/race_manager.gd
+     HUD / UI  -> res://scripts/ui/*.gd
+   No external libraries: the small WebGL renderer is included below.
+   ===================================================================== */
+
+const $ = (id) => document.getElementById(id);
+const TAU = Math.PI * 2;
+const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+const lerp = (a, b, t) => a + (b - a) * t;
+const mod = (a, n) => ((a % n) + n) % n;
+const wrapDiff = (a, b, n) => mod(a - b + n / 2, n) - n / 2;
+const angDiff = (a, b) => wrapDiff(a, b, TAU);   // a - b wrapped to [-PI, PI)
+const sgn = (v) => (v < 0 ? -1 : 1);
+
+/* ---------------------------------------------------------------------
+   Tunable settings
+   --------------------------------------------------------------------- */
+const CFG = {
+  laps: 3,
+  roadHalf: 9,        // half width of asphalt (m)
+  kerbW: 1.5,         // red/white kerb beside the asphalt (m)
+  wallH: 1.1,
+  wallT: 0.7,
+  spacing: 3,         // metres between track samples
+  fixedDt: 1 / 120,   // physics step (s)
+  aiCount: 4
+};
+const WALL_IN = CFG.roadHalf + CFG.kerbW; // distance from centre line to the inside face of the barrier
+
+const CAR = {
+  L: 2.7,             // wheelbase (m)
+  hl: 2.2, hw: 0.95,  // half length / half width used for wall contact
+  engine: 15,         // peak acceleration m/s^2
+  maxV: 64,           // top speed m/s (230 km/h)
+  brake: 32,          // braking m/s^2
+  reverseAcc: 9, reverseMax: 14,
+  aLat: 24,           // max lateral acceleration m/s^2 (limits steering at speed)
+  grip: 9,            // how fast sideways speed is removed (1/s)
+  gripHand: 1.8       // same, with the handbrake held
+};
+
+/* =====================================================================
+   Mini WebGL renderer
+   ===================================================================== */
+const M4 = {
+  mul(a, b) {
+    const o = new Float32Array(16);
+    for (let c = 0; c < 4; c++) for (let r = 0; r < 4; r++) {
+      let s = 0;
+      for (let k = 0; k < 4; k++) s += a[k * 4 + r] * b[c * 4 + k];
+      o[c * 4 + r] = s;
+    }
+    return o;
+  },
+  persp(fovy, aspect, n, f) {
+    const t = 1 / Math.tan(fovy / 2), o = new Float32Array(16);
+    o[0] = t / aspect; o[5] = t; o[10] = (f + n) / (n - f); o[11] = -1; o[14] = (2 * f * n) / (n - f);
+    return o;
+  },
+  lookAt(e, c, u) {
+    let zx = e[0] - c[0], zy = e[1] - c[1], zz = e[2] - c[2];
+    let l = Math.hypot(zx, zy, zz); zx /= l; zy /= l; zz /= l;
+    let xx = u[1] * zz - u[2] * zy, xy = u[2] * zx - u[0] * zz, xz = u[0] * zy - u[1] * zx;
+    l = Math.hypot(xx, xy, xz); xx /= l; xy /= l; xz /= l;
+    const yx = zy * xz - zz * xy, yy = zz * xx - zx * xz, yz = zx * xy - zy * xx;
+    return new Float32Array([xx, yx, zx, 0, xy, yy, zy, 0, xz, yz, zz, 0,
+      -(xx * e[0] + xy * e[1] + xz * e[2]), -(yx * e[0] + yy * e[1] + yz * e[2]), -(zx * e[0] + zy * e[1] + zz * e[2]), 1]);
+  },
+  T(x, y, z) { return new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, x, y, z, 1]); },
+  RY(a) { const c = Math.cos(a), s = Math.sin(a); return new Float32Array([c, 0, -s, 0, 0, 1, 0, 0, s, 0, c, 0, 0, 0, 0, 1]); },
+  RX(a) { const c = Math.cos(a), s = Math.sin(a); return new Float32Array([1, 0, 0, 0, 0, c, s, 0, 0, -s, c, 0, 0, 0, 0, 1]); },
+  RZ(a) { const c = Math.cos(a), s = Math.sin(a); return new Float32Array([c, s, 0, 0, -s, c, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]); },
+  // position, yaw (Y), pitch (X), roll (Z). Applied roll -> pitch -> yaw -> move.
+  model(x, y, z, ry, rx, rz) { return M4.mul(M4.T(x, y, z), M4.mul(M4.RY(ry), M4.mul(M4.RX(rx || 0), M4.RZ(rz || 0)))); },
+  IDENT: new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1])
+};
+
+const VS = `
+attribute vec3 aPos; attribute vec3 aNor; attribute vec3 aCol;
+uniform mat4 uVP; uniform mat4 uModel; uniform vec3 uCam;
+varying vec3 vCol; varying vec3 vNor; varying float vDist;
+void main(){
+  vec4 wp = uModel * vec4(aPos,1.0);
+  gl_Position = uVP * wp;
+  vNor = (uModel * vec4(aNor,0.0)).xyz;
+  vCol = aCol;
+  vDist = length(wp.xyz - uCam);
+}`;
+const FS = `
+precision mediump float;
+varying vec3 vCol; varying vec3 vNor; varying float vDist;
+uniform vec3 uSunDir; uniform vec3 uSunCol; uniform vec3 uAmbTop; uniform vec3 uAmbBot;
+uniform vec3 uFogCol; uniform float uFogNear; uniform float uFogFar;
+uniform float uUnlit; uniform vec3 uMul; uniform float uAlpha;
+void main(){
+  vec3 n = normalize(vNor);
+  float nd = max(dot(n,uSunDir),0.0);
+  vec3 amb = mix(uAmbBot,uAmbTop,n.y*0.5+0.5);
+  vec3 lit = vCol*(amb + uSunCol*nd);
+  vec3 c = mix(lit, vCol, uUnlit) * uMul;
+  float f = clamp((vDist-uFogNear)/(uFogFar-uFogNear),0.0,1.0);
+  c = mix(c, uFogCol, f);
+  gl_FragColor = vec4(c, uAlpha);
+}`;
+
+const FOG = [0.74, 0.83, 0.91];
+
+const Gfx = (function () {
+  const canvas = $('gl');
+  const gl = canvas.getContext('webgl', { antialias: true, alpha: false, powerPreference: 'high-performance' }) ||
+             canvas.getContext('experimental-webgl');
+  if (!gl) return null;
+
+  function shader(type, src) {
+    const s = gl.createShader(type);
+    gl.shaderSource(s, src); gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) console.error(gl.getShaderInfoLog(s));
+    return s;
+  }
+  const prog = gl.createProgram();
+  gl.attachShader(prog, shader(gl.VERTEX_SHADER, VS));
+  gl.attachShader(prog, shader(gl.FRAGMENT_SHADER, FS));
+  gl.linkProgram(prog);
+  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) console.error(gl.getProgramInfoLog(prog));
+  gl.useProgram(prog);
+
+  const U = {};
+  ['uVP', 'uModel', 'uCam', 'uSunDir', 'uSunCol', 'uAmbTop', 'uAmbBot', 'uFogCol', 'uFogNear', 'uFogFar', 'uUnlit', 'uMul', 'uAlpha']
+    .forEach((n) => { U[n] = gl.getUniformLocation(prog, n); });
+  const A = { pos: gl.getAttribLocation(prog, 'aPos'), nor: gl.getAttribLocation(prog, 'aNor'), col: gl.getAttribLocation(prog, 'aCol') };
+  gl.enableVertexAttribArray(A.pos); gl.enableVertexAttribArray(A.nor); gl.enableVertexAttribArray(A.col);
+
+  gl.enable(gl.DEPTH_TEST);
+  gl.disable(gl.CULL_FACE);   // every face is drawn from both sides, so winding order never matters
+
+  gl.uniform3f(U.uSunDir, 0.45, 0.80, 0.38);
+  gl.uniform3f(U.uSunCol, 0.80, 0.75, 0.62);
+  gl.uniform3f(U.uAmbTop, 0.46, 0.52, 0.62);
+  gl.uniform3f(U.uAmbBot, 0.30, 0.31, 0.27);
+  gl.uniform3f(U.uFogCol, FOG[0], FOG[1], FOG[2]);
+  gl.uniform1f(U.uFogNear, 160);
+  gl.uniform1f(U.uFogFar, 820);
+
+  const sl = Math.hypot(0.45, 0.80, 0.38);
+  gl.uniform3f(U.uSunDir, 0.45 / sl, 0.80 / sl, 0.38 / sl);
+
+  let W = 1, H = 1;
+  const api = {
+    gl, canvas,
+    get aspect() { return W / H; },
+    resize() {
+      const dpr = Math.min(window.devicePixelRatio || 1, matchMedia('(pointer:coarse)').matches ? 1.5 : 2);
+      const w = Math.max(1, Math.floor(canvas.clientWidth * dpr));
+      const h = Math.max(1, Math.floor(canvas.clientHeight * dpr));
+      if (w !== W || h !== H || canvas.width !== w) { canvas.width = w; canvas.height = h; W = w; H = h; }
+    },
+    makeMesh(d) {
+      const n = d.p.length / 3, buf = new Float32Array(n * 9);
+      for (let i = 0; i < n; i++) {
+        buf[i * 9] = d.p[i * 3]; buf[i * 9 + 1] = d.p[i * 3 + 1]; buf[i * 9 + 2] = d.p[i * 3 + 2];
+        buf[i * 9 + 3] = d.n[i * 3]; buf[i * 9 + 4] = d.n[i * 3 + 1]; buf[i * 9 + 5] = d.n[i * 3 + 2];
+        buf[i * 9 + 6] = d.c[i * 3]; buf[i * 9 + 7] = d.c[i * 3 + 1]; buf[i * 9 + 8] = d.c[i * 3 + 2];
+      }
+      const b = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, b);
+      gl.bufferData(gl.ARRAY_BUFFER, buf, gl.STATIC_DRAW);
+      return { buf: b, count: n };
+    },
+    begin(eye, target, fov) {
+      api.resize();
+      gl.viewport(0, 0, W, H);
+      gl.clearColor(FOG[0], FOG[1], FOG[2], 1);
+      gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+      const vp = M4.mul(M4.persp(fov, W / H, 0.8, 3500), M4.lookAt(eye, target, [0, 1, 0]));
+      gl.uniformMatrix4fv(U.uVP, false, vp);
+      gl.uniform3f(U.uCam, eye[0], eye[1], eye[2]);
+    },
+    // o: {unlit, mul:[r,g,b], alpha, layer, fog(false disables), depth(false), depthWrite(false)}
+    draw(mesh, model, o) {
+      o = o || {};
+      gl.bindBuffer(gl.ARRAY_BUFFER, mesh.buf);
+      gl.vertexAttribPointer(A.pos, 3, gl.FLOAT, false, 36, 0);
+      gl.vertexAttribPointer(A.nor, 3, gl.FLOAT, false, 36, 12);
+      gl.vertexAttribPointer(A.col, 3, gl.FLOAT, false, 36, 24);
+      gl.uniformMatrix4fv(U.uModel, false, model || M4.IDENT);
+      gl.uniform1f(U.uUnlit, o.unlit ? 1 : 0);
+      const m = o.mul || [1, 1, 1];
+      gl.uniform3f(U.uMul, m[0], m[1], m[2]);
+      gl.uniform1f(U.uAlpha, o.alpha === undefined ? 1 : o.alpha);
+      gl.uniform1f(U.uFogFar, o.fog === false ? 1e9 : 820);
+      if (o.layer) { gl.enable(gl.POLYGON_OFFSET_FILL); gl.polygonOffset(-o.layer, -o.layer); } else gl.disable(gl.POLYGON_OFFSET_FILL);
+      if (o.depth === false) gl.disable(gl.DEPTH_TEST); else gl.enable(gl.DEPTH_TEST);
+      gl.depthMask(o.depthWrite === false ? false : true);
+      if (o.alpha !== undefined && o.alpha < 1) { gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); } else gl.disable(gl.BLEND);
+      gl.drawArrays(gl.TRIANGLES, 0, mesh.count);
+    }
+  };
+  return api;
+})();
+
+if (!Gfx) {
+  document.getElementById('app').insertAdjacentHTML('beforeend',
+    '<div class="fatal">This browser could not start WebGL, which the 3D view needs. Try a current Chrome, Edge, Firefox or Safari.</div>');
+  return;
+}
+
+/* =====================================================================
+   Geometry builder (flat-shaded, vertex colours)
+   ===================================================================== */
+class MB {
+  constructor() { this.p = []; this.n = []; this.c = []; }
+  _v(p, n, c) { this.p.push(p[0], p[1], p[2]); this.n.push(n[0], n[1], n[2]); this.c.push(c[0], c[1], c[2]); }
+  tri(a, b, c, col, n) {
+    if (!n) {
+      const ux = b[0] - a[0], uy = b[1] - a[1], uz = b[2] - a[2], vx = c[0] - a[0], vy = c[1] - a[1], vz = c[2] - a[2];
+      n = [uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx];
+      const l = Math.hypot(n[0], n[1], n[2]) || 1; n = [n[0] / l, n[1] / l, n[2] / l];
+    }
+    this._v(a, n, col); this._v(b, n, col); this._v(c, n, col);
+  }
+  // Normal is oriented away from `core` (a point inside the solid) so winding never matters.
+  triCore(a, b, c, col, core) {
+    const ux = b[0] - a[0], uy = b[1] - a[1], uz = b[2] - a[2], vx = c[0] - a[0], vy = c[1] - a[1], vz = c[2] - a[2];
+    let n = [uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx];
+    const l = Math.hypot(n[0], n[1], n[2]) || 1; n = [n[0] / l, n[1] / l, n[2] / l];
+    const mx = (a[0] + b[0] + c[0]) / 3 - core[0], my = (a[1] + b[1] + c[1]) / 3 - core[1], mz = (a[2] + b[2] + c[2]) / 3 - core[2];
+    if (n[0] * mx + n[1] * my + n[2] * mz < 0) n = [-n[0], -n[1], -n[2]];
+    this.tri(a, b, c, col, n);
+  }
+  quadCore(a, b, c, d, col, core) { this.triCore(a, b, c, col, core); this.triCore(a, c, d, col, core); }
+  box(cx, cy, cz, sx, sy, sz, col) {
+    const x0 = cx - sx / 2, x1 = cx + sx / 2, y0 = cy - sy / 2, y1 = cy + sy / 2, z0 = cz - sz / 2, z1 = cz + sz / 2;
+    const f = (a, b, c, d, n) => { this.tri(a, b, c, col, n); this.tri(a, c, d, col, n); };
+    f([x1, y0, z0], [x1, y1, z0], [x1, y1, z1], [x1, y0, z1], [1, 0, 0]);
+    f([x0, y0, z1], [x0, y1, z1], [x0, y1, z0], [x0, y0, z0], [-1, 0, 0]);
+    f([x0, y1, z0], [x0, y1, z1], [x1, y1, z1], [x1, y1, z0], [0, 1, 0]);
+    f([x0, y0, z1], [x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [0, -1, 0]);
+    f([x1, y0, z1], [x1, y1, z1], [x0, y1, z1], [x0, y0, z1], [0, 0, 1]);
+    f([x0, y0, z0], [x0, y1, z0], [x1, y1, z0], [x1, y0, z0], [0, 0, -1]);
+  }
+  // Tapered cabin: bottom rectangle (half sizes bw,bl at y0) to top rectangle (tw,tl at y1), centred on cx,cz with a z shift for the top.
+  frustum(cx, y0, cz, bw, bl, y1, tw, tl, tzShift, col) {
+    const B = [[cx - bw, y0, cz - bl], [cx + bw, y0, cz - bl], [cx + bw, y0, cz + bl], [cx - bw, y0, cz + bl]];
+    const T = [[cx - tw, y1, cz + tzShift - tl], [cx + tw, y1, cz + tzShift - tl], [cx + tw, y1, cz + tzShift + tl], [cx - tw, y1, cz + tzShift + tl]];
+    const core = [cx, (y0 + y1) / 2, cz + tzShift / 2];
+    for (let i = 0; i < 4; i++) { const j = (i + 1) % 4; this.quadCore(B[i], B[j], T[j], T[i], col, core); }
+    this.quadCore(T[0], T[1], T[2], T[3], col, core);
+  }
+  cylX(cx, cy, cz, r, len, seg, col) { // axis along X
+    const x0 = cx - len / 2, x1 = cx + len / 2;
+    for (let i = 0; i < seg; i++) {
+      const a0 = (i / seg) * TAU, a1 = ((i + 1) / seg) * TAU;
+      const p0 = [cy + r * Math.cos(a0), cz + r * Math.sin(a0)], p1 = [cy + r * Math.cos(a1), cz + r * Math.sin(a1)];
+      this.quadCore([x0, p0[0], p0[1]], [x1, p0[0], p0[1]], [x1, p1[0], p1[1]], [x0, p1[0], p1[1]], col, [cx, cy, cz]);
+      this.tri([x1, cy, cz], [x1, p0[0], p0[1]], [x1, p1[0], p1[1]], col, [1, 0, 0]);
+      this.tri([x0, cy, cz], [x0, p0[0], p0[1]], [x0, p1[0], p1[1]], col, [-1, 0, 0]);
+    }
+  }
+  cylY(cx, y0, cz, r, h, seg, col) { // vertical
+    for (let i = 0; i < seg; i++) {
+      const a0 = (i / seg) * TAU, a1 = ((i + 1) / seg) * TAU;
+      const p0 = [cx + r * Math.cos(a0), cz + r * Math.sin(a0)], p1 = [cx + r * Math.cos(a1), cz + r * Math.sin(a1)];
+      this.quadCore([p0[0], y0, p0[1]], [p1[0], y0, p1[1]], [p1[0], y0 + h, p1[1]], [p0[0], y0 + h, p0[1]], col, [cx, y0 + h / 2, cz]);
+    }
+  }
+  cone(cx, y0, cz, r, h, seg, col) {
+    for (let i = 0; i < seg; i++) {
+      const a0 = (i / seg) * TAU, a1 = ((i + 1) / seg) * TAU;
+      this.triCore([cx, y0 + h, cz], [cx + r * Math.cos(a0), y0, cz + r * Math.sin(a0)], [cx + r * Math.cos(a1), y0, cz + r * Math.sin(a1)], col, [cx, y0 + h * 0.3, cz]);
+    }
+  }
+  disc(cx, y, cz, rx, rz, seg, col) {
+    for (let i = 0; i < seg; i++) {
+      const a0 = (i / seg) * TAU, a1 = ((i + 1) / seg) * TAU;
+      this.tri([cx, y, cz], [cx + rx * Math.cos(a1), y, cz + rz * Math.sin(a1)], [cx + rx * Math.cos(a0), y, cz + rz * Math.sin(a0)], col, [0, 1, 0]);
+    }
+  }
+  build() { return Gfx.makeMesh(this); }
+}
+
+/* =====================================================================
+   Track  (closed centripetal Catmull-Rom spline, resampled every 3 m)
+   Conventions used everywhere: ground plane is X/Z, +Y is up, heading h
+   points along (sin h, cos h). "Right" of travel is (-tz, tx).
+   ===================================================================== */
+const Track = (function () {
+  const CONTROL = [
+    [0, 0], [150, 0], [300, -20], [420, 30], [480, 140], [440, 250],
+    [340, 290], [250, 260], [190, 330], [200, 430], [110, 490], [-30, 470],
+    [-140, 390], [-170, 260], [-120, 140], [-55, 50]
+  ];
+
+  function crPoint(p0, p1, p2, p3, t) {
+    const d = (a, b) => Math.pow(Math.hypot(a[0] - b[0], a[1] - b[1]), 0.5);
+    const t0 = 0, t1 = t0 + d(p0, p1), t2 = t1 + d(p1, p2), t3 = t2 + d(p2, p3);
+    const tt = lerp(t1, t2, t);
+    const mix = (a, b, ta, tb) => { const w = (tt - ta) / (tb - ta); return [a[0] + (b[0] - a[0]) * w, a[1] + (b[1] - a[1]) * w]; };
+    const A1 = mix(p0, p1, t0, t1), A2 = mix(p1, p2, t1, t2), A3 = mix(p2, p3, t2, t3);
+    const B1 = mix(A1, A2, t0, t2), B2 = mix(A2, A3, t1, t3);
+    return mix(B1, B2, t1, t2);
+  }
+
+  // dense polyline
+  const dense = [];
+  const nc = CONTROL.length, PER = 60;
+  for (let i = 0; i < nc; i++) {
+    const p0 = CONTROL[mod(i - 1, nc)], p1 = CONTROL[i], p2 = CONTROL[(i + 1) % nc], p3 = CONTROL[(i + 2) % nc];
+    for (let k = 0; k < PER; k++) dense.push(crPoint(p0, p1, p2, p3, k / PER));
+  }
+  const cum = [0];
+  for (let i = 1; i <= dense.length; i++) {
+    const a = dense[i - 1], b = dense[i % dense.length];
+    cum.push(cum[i - 1] + Math.hypot(b[0] - a[0], b[1] - a[1]));
+  }
+  const length = cum[cum.length - 1];
+  const N = Math.round(length / CFG.spacing);
+  const ds = length / N;
+
+  const X = new Float32Array(N), Z = new Float32Array(N);
+  const START_OFFSET = 110;   // metres along the spline: puts the start line in the middle of the first straight
+  let j = 0, prevTarget = -1;
+  for (let i = 0; i < N; i++) {
+    let target = i * ds + START_OFFSET;
+    if (target >= length) target -= length;
+    if (target < prevTarget) j = 0;
+    prevTarget = target;
+    while (cum[j + 1] < target) j++;
+    const a = dense[j], b = dense[(j + 1) % dense.length];
+    const w = (target - cum[j]) / (cum[j + 1] - cum[j]);
+    X[i] = a[0] + (b[0] - a[0]) * w; Z[i] = a[1] + (b[1] - a[1]) * w;
+  }
+  const TX = new Float32Array(N), TZ = new Float32Array(N), H = new Float32Array(N);
+  for (let i = 0; i < N; i++) {
+    const a = (i + 1) % N, b = mod(i - 1, N);
+    const tx = X[a] - X[b], tz = Z[a] - Z[b], l = Math.hypot(tx, tz);
+    TX[i] = tx / l; TZ[i] = tz / l; H[i] = Math.atan2(TX[i], TZ[i]);
+  }
+  // curvature (1/radius) and the speed profile the computer drivers follow
+  const K = new Float32Array(N);
+  for (let i = 0; i < N; i++) K[i] = Math.abs(angDiff(H[(i + 2) % N], H[mod(i - 2, N)])) / (4 * ds);
+  const KS = new Float32Array(N);
+  for (let i = 0; i < N; i++) { let m = 0; for (let k = -3; k <= 3; k++) m = Math.max(m, K[mod(i + k, N)]); KS[i] = m; }
+  const AI_LAT = 20, AI_BRAKE = 24, AI_TOP = 62;
+  const vProf = new Float32Array(N);
+  for (let i = 0; i < N; i++) vProf[i] = Math.min(AI_TOP, Math.sqrt(AI_LAT / Math.max(KS[i], 1e-4)));
+  for (let pass = 0; pass < 3; pass++) {
+    for (let i = N * 2 - 1; i >= 0; i--) {
+      const a = i % N, b = (i + 1) % N;
+      vProf[a] = Math.min(vProf[a], Math.sqrt(vProf[b] * vProf[b] + 2 * AI_BRAKE * ds));
+    }
+  }
+
+  function nearest(x, z, hint) {
+    let best = 1e18, bi = hint;
+    for (let k = -30; k <= 30; k++) {
+      const i = mod(hint + k, N), dx = x - X[i], dz = z - Z[i], d = dx * dx + dz * dz;
+      if (d < best) { best = d; bi = i; }
+    }
+    return bi;
+  }
+  function nearestFull(x, z) {
+    let best = 1e18, bi = 0;
+    for (let i = 0; i < N; i++) { const dx = x - X[i], dz = z - Z[i], d = dx * dx + dz * dz; if (d < best) { best = d; bi = i; } }
+    return bi;
+  }
+  // world position at fractional sample index s with lateral offset (right positive)
+  function at(s, lat) {
+    const f0 = Math.floor(s), f = s - f0, a = mod(f0, N), b = (a + 1) % N;
+    const cx = lerp(X[a], X[b], f), cz = lerp(Z[a], Z[b], f);
+    let tx = lerp(TX[a], TX[b], f), tz = lerp(TZ[a], TZ[b], f);
+    const l = Math.hypot(tx, tz) || 1; tx /= l; tz /= l;
+    return { x: cx - tz * lat, z: cz + tx * lat, h: Math.atan2(tx, tz) };
+  }
+  function speedAt(s) {
+    const f0 = Math.floor(s), f = s - f0, a = mod(f0, N), b = (a + 1) % N;
+    return lerp(vProf[a], vProf[b], f);
+  }
+  return { N, ds, length, X, Z, TX, TZ, H, K, vProf, nearest, nearestFull, at, speedAt, CONTROL };
+})();
+
+/* =====================================================================
+   World: ground, road, kerbs, barriers, scenery (placeholder geometry)
+   ===================================================================== */
+const World = (function () {
+  const T = Track, N = T.N;
+  const hex = (h) => [((h >> 16) & 255) / 255, ((h >> 8) & 255) / 255, (h & 255) / 255];
+
+  // Ribbon along the track. profile = [[lateral,y],...] ; colorFn(i) -> colour or null ; core = a point inside the solid
+  function ribbon(profile, colorFn, coreLat, coreY) {
+    const mb = new MB();
+    const P = (i, o) => [T.X[i] - T.TZ[i] * o[0], o[1], T.Z[i] + T.TX[i] * o[0]];
+    for (let i = 0; i < N; i++) {
+      const j = (i + 1) % N, col = colorFn(i);
+      if (!col) continue;
+      const core = [T.X[i] - T.TZ[i] * coreLat, coreY, T.Z[i] + T.TX[i] * coreLat];
+      for (let k = 0; k < profile.length - 1; k++) {
+        const a = profile[k], b = profile[k + 1];
+        mb.quadCore(P(i, a), P(i, b), P(j, b), P(j, a), col, core);
+      }
+    }
+    return mb.build();
+  }
+
+  const asphaltA = hex(0x30343b), asphaltB = hex(0x353a42);
+  const red = hex(0xd8322b), white = hex(0xf0f0f0), blue = hex(0x2d6cdf), line = hex(0xf2f2f2);
+
+  const road = ribbon([[-CFG.roadHalf, 0.03], [CFG.roadHalf, 0.03]], (i) => ((i >> 2) & 1 ? asphaltA : asphaltB), 0, -1);
+  const kerbs = new MB();
+  const kerbR = ribbon([[CFG.roadHalf, 0.04], [WALL_IN, 0.04]], (i) => ((i >> 1) & 1 ? red : white), 0, -1);
+  const kerbL = ribbon([[-WALL_IN, 0.04], [-CFG.roadHalf, 0.04]], (i) => ((i >> 1) & 1 ? red : white), 0, -1);
+  const edgeR = ribbon([[CFG.roadHalf - 0.55, 0.045], [CFG.roadHalf - 0.25, 0.045]], () => line, 0, -1);
+  const edgeL = ribbon([[-CFG.roadHalf + 0.25, 0.045], [-CFG.roadHalf + 0.55, 0.045]], () => line, 0, -1);
+  const dash = ribbon([[-0.14, 0.045], [0.14, 0.045]], (i) => (i % 8 < 4 ? line : null), 0, -1);
+  const wallC = (i) => ((i >> 2) & 1 ? white : blue);
+  const wallR = ribbon([[WALL_IN, 0], [WALL_IN, CFG.wallH], [WALL_IN + CFG.wallT, CFG.wallH], [WALL_IN + CFG.wallT, 0]], wallC, WALL_IN + CFG.wallT / 2, CFG.wallH / 2);
+  const wallL = ribbon([[-WALL_IN, 0], [-WALL_IN, CFG.wallH], [-WALL_IN - CFG.wallT, CFG.wallH], [-WALL_IN - CFG.wallT, 0]], wallC, -WALL_IN - CFG.wallT / 2, CFG.wallH / 2);
+
+  // bounds
+  let minX = 1e9, maxX = -1e9, minZ = 1e9, maxZ = -1e9;
+  for (let i = 0; i < N; i++) { minX = Math.min(minX, T.X[i]); maxX = Math.max(maxX, T.X[i]); minZ = Math.min(minZ, T.Z[i]); maxZ = Math.max(maxZ, T.Z[i]); }
+  const cx = (minX + maxX) / 2, cz = (minZ + maxZ) / 2;
+
+  // ground: two-tone tiles give a sense of speed
+  const g = new MB(), TILE = 40, HALF = 1800;
+  const gA = hex(0x4c6b3f), gB = hex(0x476639);
+  for (let ix = -HALF; ix < HALF; ix += TILE) {
+    for (let iz = -HALF; iz < HALF; iz += TILE) {
+      const x0 = Math.round(cx / TILE) * TILE + ix, z0 = Math.round(cz / TILE) * TILE + iz;
+      const col = ((ix / TILE + iz / TILE) & 1) ? gA : gB;
+      g.tri([x0, 0, z0], [x0, 0, z0 + TILE], [x0 + TILE, 0, z0 + TILE], col, [0, 1, 0]);
+      g.tri([x0, 0, z0], [x0 + TILE, 0, z0 + TILE], [x0 + TILE, 0, z0], col, [0, 1, 0]);
+    }
+  }
+  const ground = g.build();
+
+  // trees (seeded random so the scenery is identical every run)
+  let seed = 12345;
+  const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+  const tb = new MB();
+  const samples = [];
+  for (let i = 0; i < N; i += 3) samples.push([T.X[i], T.Z[i]]);
+  let placed = 0, tries = 0;
+  while (placed < 330 && tries < 6000) {
+    tries++;
+    const x = minX - 260 + rnd() * (maxX - minX + 520), z = minZ - 260 + rnd() * (maxZ - minZ + 520);
+    let ok = true;
+    for (let k = 0; k < samples.length; k++) { const dx = x - samples[k][0], dz = z - samples[k][1]; if (dx * dx + dz * dz < 34 * 34) { ok = false; break; } }
+    if (!ok) continue;
+    const s = 0.8 + rnd() * 0.9, shade = 0.85 + rnd() * 0.3;
+    tb.cylY(x, 0, z, 0.35 * s, 2.2 * s, 5, hex(0x5a3f2a));
+    tb.cone(x, 1.6 * s, z, 2.4 * s, 4.6 * s, 6, [0.16 * shade, 0.36 * shade, 0.19 * shade]);
+    tb.cone(x, 3.6 * s, z, 1.8 * s, 3.8 * s, 6, [0.18 * shade, 0.40 * shade, 0.21 * shade]);
+    placed++;
+  }
+  const trees = tb.build();
+
+  // far mountains (unlit, fade into the fog colour at the base)
+  const mm = new MB();
+  for (let i = 0; i < 16; i++) {
+    const a = (i / 16) * TAU + rnd() * 0.3, d = 1300 + rnd() * 250, r = 220 + rnd() * 220, h = 140 + rnd() * 200;
+    const x = cx + Math.cos(a) * d, z = cz + Math.sin(a) * d, seg = 6;
+    for (let k = 0; k < seg; k++) {
+      const a0 = (k / seg) * TAU, a1 = ((k + 1) / seg) * TAU;
+      const p0 = [x + r * Math.cos(a0), -10, z + r * Math.sin(a0)], p1 = [x + r * Math.cos(a1), -10, z + r * Math.sin(a1)];
+      const top = [x, h, z];
+      const lo = FOG, hi = [0.45 + 0.08 * rnd(), 0.55 + 0.05 * rnd(), 0.68];
+      mm._v(p0, [0, 1, 0], lo); mm._v(p1, [0, 1, 0], lo); mm._v(top, [0, 1, 0], hi);
+    }
+  }
+  const mountains = mm.build();
+
+  // sky dome: gradient from horizon colour to zenith blue
+  const sb = new MB(), SR = 1500, SEGH = 20, SEGV = 8;
+  const skyCol = (y) => { const t = Math.pow(clamp(y, 0, 1), 0.55); return [lerp(FOG[0], 0.22, t), lerp(FOG[1], 0.47, t), lerp(FOG[2], 0.85, t)]; };
+  for (let v = 0; v < SEGV; v++) {
+    const e0 = (v / SEGV) * (Math.PI / 2), e1 = ((v + 1) / SEGV) * (Math.PI / 2);
+    for (let h = 0; h < SEGH; h++) {
+      const a0 = (h / SEGH) * TAU, a1 = ((h + 1) / SEGH) * TAU;
+      const P = (e, a) => [SR * Math.cos(e) * Math.cos(a), SR * Math.sin(e), SR * Math.cos(e) * Math.sin(a)];
+      const p00 = P(e0, a0), p01 = P(e0, a1), p10 = P(e1, a0), p11 = P(e1, a1);
+      const c0 = skyCol(Math.sin(e0)), c1 = skyCol(Math.sin(e1));
+      sb._v(p00, [0, 1, 0], c0); sb._v(p01, [0, 1, 0], c0); sb._v(p11, [0, 1, 0], c1);
+      sb._v(p00, [0, 1, 0], c0); sb._v(p11, [0, 1, 0], c1); sb._v(p10, [0, 1, 0], c1);
+    }
+  }
+  const sky = sb.build();
+
+  // grandstand beside the start straight
+  const gs = new MB();
+  {
+    const a = T.at(14, 0), nx = -Math.cos(a.h), nz = Math.sin(a.h); // "right" unit vector of the track
+    const off = 20;
+    const bx = a.x + nx * off, bz = a.z + nz * off;
+    // build in local axes then place by rotating around Y with a.h
+    const loc = new MB();
+    loc.box(0, 2.5, 0, 6, 5, 46, hex(0x8a8f99));
+    loc.box(-1.3, 5.2, 0, 3.6, 0.5, 46, hex(0xc43a31));
+    for (let k = -4; k <= 4; k++) loc.box(1.6, 3.3, k * 5, 0.5, 1.1, 3.2, [0.9 - (k & 1) * 0.5, 0.75, 0.3 + (k & 1) * 0.5]);
+    const cosH = Math.cos(a.h + Math.PI / 2), sinH = Math.sin(a.h + Math.PI / 2);
+    for (let i = 0; i < loc.p.length; i += 3) {
+      const lx = loc.p[i], ly = loc.p[i + 1], lz = loc.p[i + 2];
+      const wx = bx + lx * cosH + lz * sinH, wz = bz - lx * sinH + lz * cosH;
+      gs.p.push(wx, ly, wz);
+      const nx0 = loc.n[i], ny0 = loc.n[i + 1], nz0 = loc.n[i + 2];
+      gs.n.push(nx0 * cosH + nz0 * sinH, ny0, -nx0 * sinH + nz0 * cosH);
+      gs.c.push(loc.c[i], loc.c[i + 1], loc.c[i + 2]);
+    }
+  }
+  const stand = gs.build();
+
+  // start line + gantry (built in track-local space, placed with a yaw matrix)
+  const sl = new MB();
+  for (let k = 0; k < 9; k++) for (let r = 0; r < 2; r++) {
+    const w = (CFG.roadHalf * 2) / 9, x0 = -CFG.roadHalf + k * w, z0 = -1 + r;
+    const col = (k + r) & 1 ? [0.05, 0.05, 0.05] : [0.95, 0.95, 0.95];
+    sl.tri([x0, 0.05, z0], [x0 + w, 0.05, z0], [x0 + w, 0.05, z0 + 1], col, [0, 1, 0]);
+    sl.tri([x0, 0.05, z0], [x0 + w, 0.05, z0 + 1], [x0, 0.05, z0 + 1], col, [0, 1, 0]);
+  }
+  const startLine = sl.build();
+  const gb = new MB();
+  gb.box(-12.8, 4, 0, 0.8, 8, 0.8, hex(0x2a2f38));
+  gb.box(12.8, 4, 0, 0.8, 8, 0.8, hex(0x2a2f38));
+  for (let k = 0; k < 13; k++) gb.box(-12 + k * 2, 7.4, 0, 2, 1.6, 0.5, k & 1 ? [0.06, 0.06, 0.06] : [0.95, 0.95, 0.95]);
+  gb.box(0, 8.5, 0, 26, 0.5, 0.7, hex(0xd8322b));
+  const gantry = gb.build();
+
+  // checkpoint gates
+  const cb = new MB();
+  cb.box(-CFG.roadHalf - 0.2, 1.8, 0, 0.35, 3.6, 0.35, [1, 1, 1]);
+  cb.box(CFG.roadHalf + 0.2, 1.8, 0, 0.35, 3.6, 0.35, [1, 1, 1]);
+  cb.box(0, 3.6, 0, CFG.roadHalf * 2 + 0.6, 0.3, 0.3, [1, 1, 1]);
+  cb.tri([-CFG.roadHalf, 0.05, -0.3], [CFG.roadHalf, 0.05, -0.3], [CFG.roadHalf, 0.05, 0.3], [1, 1, 1], [0, 1, 0]);
+  cb.tri([-CFG.roadHalf, 0.05, -0.3], [CFG.roadHalf, 0.05, 0.3], [-CFG.roadHalf, 0.05, 0.3], [1, 1, 1], [0, 1, 0]);
+  const gate = cb.build();
+
+  // blob shadow
+  const shb = new MB();
+  shb.disc(0, 0.07, 0, 1.25, 2.6, 18, [0, 0, 0]);
+  const blob = shb.build();
+
+  return { ground, road, kerbs: [kerbR, kerbL], lines: [edgeR, edgeL, dash], walls: [wallR, wallL], trees, mountains, sky, stand, startLine, gantry, gate, blob, cx, cz };
+})();
+
+/* =====================================================================
+   Car model (placeholder boxes)
+   ===================================================================== */
+function buildCarModel(bodyHex) {
+  const col = [((bodyHex >> 16) & 255) / 255, ((bodyHex >> 8) & 255) / 255, (bodyHex & 255) / 255];
+  const dark = [0.08, 0.10, 0.14], glass = [0.16, 0.24, 0.32], black = [0.05, 0.05, 0.06];
+  const b = new MB();
+  b.box(0, 0.58, 0, 1.9, 0.48, 4.4, col);                    // main body
+  b.box(0, 0.38, 0, 2.0, 0.14, 4.2, dark);                   // skirt / floor
+  b.box(0, 0.86, -1.55, 1.7, 0.08, 1.25, col);               // hood panel (front is +Z, so this is rear deck)
+  b.frustum(0, 0.82, -0.25, 0.88, 1.15, 1.28, 0.62, 0.7, -0.15, glass);
+  b.box(0, 1.30, -0.4, 1.2, 0.05, 1.3, col);                  // roof
+  b.box(0, 1.05, -2.0, 1.9, 0.07, 0.5, dark);                 // spoiler wing
+  b.box(-0.6, 0.92, -1.95, 0.08, 0.3, 0.2, dark);
+  b.box(0.6, 0.92, -1.95, 0.08, 0.3, 0.2, dark);
+  const bodyMesh = b.build();
+
+  const l = new MB(); // lights: head (front +Z) and tail (rear)
+  l.box(-0.65, 0.66, 2.2, 0.45, 0.14, 0.06, [1, 0.96, 0.8]);
+  l.box(0.65, 0.66, 2.2, 0.45, 0.14, 0.06, [1, 0.96, 0.8]);
+  const headMesh = l.build();
+  const t = new MB();
+  t.box(-0.65, 0.7, -2.21, 0.5, 0.12, 0.06, [1, 0.12, 0.1]);
+  t.box(0.65, 0.7, -2.21, 0.5, 0.12, 0.06, [1, 0.12, 0.1]);
+  const tailMesh = t.build();
+
+  const w = new MB();
+  w.cylX(0, 0, 0, 0.36, 0.3, 14, black);
+  w.cylX(0, 0, 0, 0.2, 0.32, 10, [0.62, 0.64, 0.68]);
+  w.box(0, 0, 0, 0.34, 0.07, 0.4, [0.85, 0.86, 0.9]);
+  w.box(0, 0, 0, 0.34, 0.4, 0.07, [0.85, 0.86, 0.9]);
+  const wheelMesh = w.build();
+  return { bodyMesh, headMesh, tailMesh, wheelMesh };
+}
+const WHEELS = [[-0.95, 0.36, 1.4, true], [0.95, 0.36, 1.4, true], [-0.95, 0.36, -1.4, false], [0.95, 0.36, -1.4, false]];
+
+function drawCar(model, x, z, h, pitch, roll, steer, spin, braking) {
+  const M = M4.model(x, 0, z, h, pitch, roll);
+  Gfx.draw(model.bodyMesh, M);
+  Gfx.draw(model.headMesh, M, { unlit: true });
+  Gfx.draw(model.tailMesh, M, { unlit: true, mul: braking ? [1, 1, 1] : [0.45, 0.45, 0.45] });
+  for (const w of WHEELS) {
+    const WM = M4.mul(M, M4.mul(M4.T(w[0], w[1], w[2]), M4.mul(M4.RY(w[3] ? steer : 0), M4.RX(spin))));
+    Gfx.draw(model.wheelMesh, WM);
+  }
+}
+function drawShadow(x, z, h) { Gfx.draw(World.blob, M4.model(x, 0, z, h, 0, 0), { unlit: true, alpha: 0.33, depthWrite: false, layer: 3, mul: [1, 1, 1] }); }
+
+/* =====================================================================
+   Input  (keyboard + touch write to the same state; the car only reads this)
+   ===================================================================== */
+const Input = {
+  keys: new Set(),
+  touch: { left: false, right: false, gas: false, brake: false, hand: false },
+  override: null,   // used by automated tests
+  read() {
+    if (this.override) return this.override;
+    const k = this.keys, t = this.touch;
+    const L = k.has('KeyA') || k.has('ArrowLeft') || t.left;
+    const R = k.has('KeyD') || k.has('ArrowRight') || t.right;
+    return {
+      throttle: (k.has('KeyW') || k.has('ArrowUp') || t.gas) ? 1 : 0,
+      brake: (k.has('KeyS') || k.has('ArrowDown') || t.brake) ? 1 : 0,
+      steer: (R ? 1 : 0) - (L ? 1 : 0),   // +1 = right
+      handbrake: k.has('Space') || t.hand
+    };
+  }
+};
+
+/* =====================================================================
+   Player car  (arcade model; physics runs only in the fixed step)
+   ===================================================================== */
+class PlayerCar {
+  constructor() {
+    this.model = buildCarModel(0xe0262b);
+    this.place(0, 0, 0);
+    this.rx = 0; this.rz = 0; this.rh = 0; this.pitch = 0; this.roll = 0; this.braking = false;
+  }
+  place(x, z, h) {
+    this.x = x; this.z = z; this.h = h; this.px = x; this.pz = z; this.ph = h;
+    this.vx = 0; this.vz = 0; this.steer = 0; this.yaw = 0; this.vf = 0; this.longAcc = 0;
+    this.hint = Track.nearestFull(x, z); this.idxF = this.hint; this.lat = 0;
+    this.wheelRot = 0; this.impact = 0; this.sliding = false;
+  }
+  get speed() { return Math.hypot(this.vx, this.vz); }
+
+  step(dt, inp, canDrive, coast) {
+    this.px = this.x; this.pz = this.z; this.ph = this.h;
+    let thr = canDrive ? inp.throttle : 0, brk = canDrive ? inp.brake : 0;
+    let hand = canDrive && inp.handbrake, st = canDrive ? inp.steer : 0;
+    if (coast) { brk = 1; st = 0; hand = false; }
+
+    // steering input is smoothed so keyboard taps feel progressive
+    const rate = st === 0 ? 7 : 4.2;
+    this.steer += clamp(st - this.steer, -rate * dt, rate * dt);
+
+    // 1) steering -> yaw rate (bicycle model, limited by lateral grip at speed)
+    let fx = Math.sin(this.h), fz = Math.cos(this.h);
+    let vf = this.vx * fx + this.vz * fz;
+    const av = Math.abs(vf);
+    const dMax = Math.min(0.5, Math.atan((CAR.aLat * CAR.L) / Math.max(av * av, 1)));
+    let yaw = (vf * Math.tan(-this.steer * dMax)) / CAR.L;
+    if (hand && av > 3) yaw *= 1.5;
+    this.h += yaw * dt; this.yaw = yaw;
+
+    // 2) split the world velocity into forward / sideways parts of the rotated car
+    fx = Math.sin(this.h); fz = Math.cos(this.h);
+    const sx = Math.cos(this.h), sz = -Math.sin(this.h);
+    vf = this.vx * fx + this.vz * fz;
+    let vl = this.vx * sx + this.vz * sz;
+
+    // 3) forward forces
+    let a = 0;
+    if (thr > 0) a += vf < -0.5 ? CAR.brake * thr : thr * CAR.engine * Math.max(0, 1 - (vf / CAR.maxV) * (vf / CAR.maxV));
+    if (brk > 0) {
+      if (vf > 0.5) a -= CAR.brake * brk;
+      else if (!coast) a -= brk * CAR.reverseAcc * Math.max(0, 1 - (vf / -CAR.reverseMax) * (vf / -CAR.reverseMax));
+      else a = -vf / dt * 0.5; // coast: bring to a halt, never reverse
+    }
+    a -= 0.0006 * vf * Math.abs(vf) + 0.5 * clamp(vf, -1, 1);
+    if (hand) a -= 7 * clamp(vf, -1, 1);
+    vf += a * dt; this.longAcc = a;
+
+    // 4) sideways grip: lower with the handbrake or at large slip angles (drift)
+    const slip = Math.abs(vl) / (Math.abs(vf) + 3);
+    let grip = hand ? CAR.gripHand : CAR.grip;
+    grip *= lerp(1, 0.5, clamp((slip - 0.2) / 0.5, 0, 1));
+    vl *= Math.exp(-grip * dt);
+    this.sliding = slip > 0.22 && Math.abs(vf) > 8;
+
+    this.vx = fx * vf + sx * vl; this.vz = fz * vf + sz * vl;
+    this.x += this.vx * dt; this.z += this.vz * dt;
+    this.vf = vf;
+    this.wheelRot += (vf * dt) / 0.36;
+    this.braking = brk > 0 && vf > 0.5;
+
+    this.collideTrack(dt);
+  }
+
+  // Barrier + kerb handling relative to the nearest track sample
+  collideTrack(dt) {
+    const T = Track, i = T.nearest(this.x, this.z, this.hint);
+    this.hint = i;
+    const rx = -T.TZ[i], rz = T.TX[i];
+    const dx = this.x - T.X[i], dz = this.z - T.Z[i];
+    const d = dx * rx + dz * rz, along = dx * T.TX[i] + dz * T.TZ[i];
+    this.idxF = i + clamp(along / T.ds, -1, 1);
+    this.lat = d;
+    const fx = Math.sin(this.h), fz = Math.cos(this.h), sx = Math.cos(this.h), sz = -Math.sin(this.h);
+    const ext = CAR.hl * Math.abs(fx * rx + fz * rz) + CAR.hw * Math.abs(sx * rx + sz * rz);
+    const pen = Math.abs(d) + ext - WALL_IN;
+    this.impact = 0;
+    if (Math.abs(d) > CFG.roadHalf) { const f = 1 - 0.5 * dt; this.vx *= f; this.vz *= f; } // kerb drag
+    if (pen > 0) {
+      const s = sgn(d);
+      this.x -= rx * s * pen; this.z -= rz * s * pen;
+      const nx = -rx * s, nz = -rz * s;               // points back toward the track
+      const vn = this.vx * nx + this.vz * nz;
+      if (vn < 0) { this.vx -= nx * vn * 1.18; this.vz -= nz * vn * 1.18; this.impact = -vn; }
+      const f = Math.max(0, 1 - 1.4 * dt); this.vx *= f; this.vz *= f;   // scraping slows the car
+      if (this.vf > 0) this.h += angDiff(T.H[i], this.h) * Math.min(1, 3 * dt);   // slide along the barrier
+    }
+  }
+
+  render(alpha, dt) {
+    this.rx = lerp(this.px, this.x, alpha); this.rz = lerp(this.pz, this.z, alpha);
+    this.rh = this.ph + angDiff(this.h, this.ph) * alpha;
+    const tp = clamp(-this.longAcc * 0.004, -0.06, 0.06), tr = clamp(this.yaw * Math.min(Math.abs(this.vf), 40) * 0.0016, -0.07, 0.07);
+    const k = 1 - Math.exp(-10 * (dt || 0.016));
+    this.pitch = lerp(this.pitch, tp, k); this.roll = lerp(this.roll, tr, k);
+  }
+  draw() {
+    drawShadow(this.rx, this.rz, this.rh);
+    drawCar(this.model, this.rx, this.rz, this.rh, this.pitch, this.roll, -this.steer * 0.35, this.wheelRot, this.braking);
+  }
+}
+
+/* =====================================================================
+   Computer drivers: follow the centre line with a speed profile
+   (kinematic placeholders; a proper AI comes in a later phase)
+   ===================================================================== */
+class AICar {
+  constructor(slot, color, skill) {
+    this.model = buildCarModel(color);
+    this.skill = skill; this.slot = slot; this.phase = slot * 1.7;
+    this.s = 0; this.v = 0; this.lat = 0; this.baseLat = 0;
+    this.x = 0; this.z = 0; this.h = 0; this.px = 0; this.pz = 0; this.ph = 0;
+    this.finished = false; this.wheelRot = 0; this.braking = false; this.acc = 12 + 4 * skill;
+    this.rx = 0; this.rz = 0; this.rh = 0;
+  }
+  place(s, lat) {
+    this.s = s; this.baseLat = lat; this.lat = lat; this.v = 0; this.finished = false; this.wheelRot = 0;
+    const p = Track.at(s, lat); this.x = p.x; this.z = p.z; this.h = p.h;
+    this.px = this.x; this.pz = this.z; this.ph = this.h;
+  }
+  step(dt, go, time) {
+    this.px = this.x; this.pz = this.z; this.ph = this.h;
+    if (go) {
+      let target = Track.speedAt(this.s) * this.skill;
+      if (this.finished) target = Math.min(target, 28);
+      if (this.v < target) this.v = Math.min(target, this.v + this.acc * dt); else this.v = Math.max(target, this.v - 24 * dt);
+      this.braking = this.v > target + 0.5;
+      this.s += (this.v * dt) / Track.ds;
+    }
+    const latT = clamp(this.baseLat + Math.sin(time * 0.17 + this.phase) * 1.4, -6, 6);
+    this.lat += (latT - this.lat) * Math.min(1, 1.3 * dt);
+    const p = Track.at(this.s, this.lat);
+    const mx = p.x - this.x, mz = p.z - this.z;
+    this.x = p.x; this.z = p.z;
+    if (this.v > 1 && mx * mx + mz * mz > 1e-8) this.h += angDiff(Math.atan2(mx, mz), this.h) * Math.min(1, 12 * dt);
+    else this.h += angDiff(p.h, this.h) * Math.min(1, 4 * dt);
+    this.wheelRot += (this.v * dt) / 0.36;
+  }
+  render(alpha) {
+    this.rx = lerp(this.px, this.x, alpha); this.rz = lerp(this.pz, this.z, alpha);
+    this.rh = this.ph + angDiff(this.h, this.ph) * alpha;
+  }
+  draw() { drawShadow(this.rx, this.rz, this.rh); drawCar(this.model, this.rx, this.rz, this.rh, 0, 0, 0, this.wheelRot, this.braking); }
+}
+
+/* =====================================================================
+   Chase camera
+   ===================================================================== */
+const ChaseCam = {
+  yaw: 0, shake: 0, init: false, eye: [0, 3, -8], target: [0, 1, 0], fov: 1.08,
+  snap(h) { this.init = false; this.yaw = h; },
+  update(dt, x, z, h, speed, orbit) {
+    if (orbit) this.yaw += dt * 0.35;
+    else this.yaw += angDiff(h, this.yaw) * (1 - Math.exp(-5 * dt));
+    const dist = (orbit ? 9.5 : 7.4) + Math.min(speed, 60) * 0.025, height = orbit ? 2.7 : 2.6;
+    const dx = Math.sin(this.yaw), dz = Math.cos(this.yaw);
+    const want = [x - dx * dist, height, z - dz * dist];
+    if (!this.init) { this.eye = want; this.init = true; }
+    else {
+      const k = 1 - Math.exp(-14 * dt);
+      this.eye = [lerp(this.eye[0], want[0], k), lerp(this.eye[1], want[1], k), lerp(this.eye[2], want[2], k)];
+    }
+    this.shake *= Math.exp(-6 * dt);
+    const sh = this.shake * 0.4;
+    const e = [this.eye[0] + (Math.random() - 0.5) * sh, this.eye[1] + (Math.random() - 0.5) * sh, this.eye[2] + (Math.random() - 0.5) * sh];
+    this.target = orbit ? [x, 0.9, z] : [x + dx * 3, 0.5, z + dz * 3];
+    this.fov = lerp(this.fov, (58 + clamp(speed, 0, 64) * 0.28) * Math.PI / 180, 1 - Math.exp(-4 * dt));
+    return e;
+  }
+};
+
+/* =====================================================================
+   Race manager: grid, countdown, gates, laps, positions, results
+   ===================================================================== */
+const GATES = 8;   // gates per lap (the 8th is the start/finish line)
+const Race = {
+  state: 'menu',   // menu | countdown | racing | finishing | results | paused
+  prevState: 'menu',
+  t: 0, countT: 0, lapStart: 0, lapTimes: [], player: null, ais: [], finishOrder: [],
+  p: 0, maxP: 0, prevCur: 0, nextM: 1, lastResetAt: -9, finishAt: 0, wrongWayT: 0,
+  position: 5, simTime: 0, finalPos: 0,
+
+  init() {
+    this.player = new PlayerCar();
+    const colors = [0x2f6fed, 0xf2f2f2, 0x1fb26b, 0xf28a1a];
+    const skills = [0.82, 0.76, 0.70, 0.64];
+    this.ais = colors.map((c, i) => new AICar(i, c, skills[i]));
+    this.layout();
+  },
+  slots() {   // [rowIndex, lateral]  (lateral: +right)
+    return [[0, -3], [0, 3], [1, -3], [1, 3], [2, -3]];
+  },
+  gridS(row) { return -(9 + 8 * row) / Track.ds; },
+  layout() {
+    const sl = this.slots(), playerSlot = 3;
+    let ai = 0;
+    for (let k = 0; k < sl.length; k++) {
+      const s = this.gridS(sl[k][0]);
+      if (k === playerSlot) {
+        const p = Track.at(s, sl[k][1]);
+        this.player.place(p.x, p.z, p.h);
+        this.p = s; this.maxP = s;
+        this.prevCur = this.player.idxF;
+      } else { this.ais[ai].place(s, sl[k][1]); ai++; }
+    }
+    this.t = 0; this.countT = 0; this.lapStart = 0; this.lapTimes = []; this.finishOrder = [];
+    this.nextM = 1; this.wrongWayT = 0; this.finalPos = 0; this.position = 4;
+    ChaseCam.snap(this.player.h);
+  },
+  begin() { this.layout(); this.state = 'countdown'; HUD.showMsg('3'); },
+  lap() { return clamp(Math.floor(this.maxP / Track.N) + 1, 1, CFG.laps); },
+  cpInLap() { return (this.nextM - 1) % GATES; },
+  progressOf(c) { return c === this.player ? this.maxP : c.s; },
+
+  resetPlayer() {
+    if (this.simTime - this.lastResetAt < 0.5) return;
+    this.lastResetAt = this.simTime;
+    const m = this.nextM - 1;
+    let s, lat = 0;
+    if (m <= 0) { s = this.gridS(1); lat = 3; } else s = (m * Track.N) / GATES;
+    const p = Track.at(s, lat);
+    this.player.place(p.x, p.z, p.h);
+    this.p = Math.min(this.maxP, m <= 0 ? this.gridS(1) : s);
+    this.prevCur = this.player.idxF;
+    ChaseCam.snap(p.h);
+    HUD.toast('Reset to track');
+  },
+
+  update(dt) {
+    this.simTime += dt;
+    const st = this.state, P = this.player;
+    if (st === 'countdown') {
+      this.countT += dt;
+      const n = 3 - Math.floor(this.countT);
+      if (this.countT < 3) HUD.showMsg(String(n));
+      else { this.state = 'racing'; this.goShown = true; HUD.showMsg('GO!', true); }
+    }
+    const go = this.state === 'racing' || this.state === 'finishing' || this.state === 'results';
+    const racing = this.state === 'racing';
+    if (racing) this.t += dt;
+    if (this.goShown && this.t > 0.9) { this.goShown = false; HUD.showMsg(''); }
+
+    P.step(dt, Input.read(), racing, this.state === 'finishing' || this.state === 'results');
+    if (P.impact > 4) { ChaseCam.shake = Math.min(1.2, ChaseCam.shake + P.impact * 0.06); HUD.flash(); }
+    for (const a of this.ais) a.step(dt, go, this.simTime);
+    this.collideCars();
+
+    // progress (unwrapped along the lap) and gate events
+    const delta = wrapDiff(P.idxF, this.prevCur, Track.N);
+    this.prevCur = P.idxF;
+    this.p += delta;
+    if (this.p > this.maxP) this.maxP = this.p;
+    if (racing) this.gateEvents();
+
+    // wrong way hint
+    if (racing) {
+      const i = P.hint, along = P.vx * Track.TX[i] + P.vz * Track.TZ[i];
+      this.wrongWayT = along < -2 && P.speed > 3 ? this.wrongWayT + dt : 0;
+    }
+
+    // computer drivers finishing
+    for (const a of this.ais) {
+      if (!a.finished && a.s >= CFG.laps * Track.N) { a.finished = true; this.finishOrder.push(a); }
+    }
+    this.rank();
+
+    if (this.state === 'finishing' && this.simTime - this.finishAt > 2.6) this.showResults();
+  },
+
+  gateEvents() {
+    const gateLen = Track.N / GATES;
+    while (this.maxP >= this.nextM * gateLen && this.state === 'racing') {
+      const m = this.nextM;
+      if (m % GATES === 0) {
+        const lapNo = m / GATES;
+        this.lapTimes.push(this.t - this.lapStart);
+        this.lapStart = this.t;
+        if (lapNo >= CFG.laps) {
+          this.state = 'finishing'; this.finishAt = this.simTime;
+          this.finishOrder.push(this.player);
+          this.finalPos = this.finishOrder.length;
+          HUD.showMsg('');
+          HUD.toast('Finish!');
+        } else HUD.toast('Lap ' + (lapNo + 1) + ' of ' + CFG.laps);
+      } else HUD.toast('Gate ' + (m % GATES) + ' of ' + GATES);
+      this.nextM++;
+    }
+  },
+
+  collideCars() {
+    const P = this.player;
+    for (const a of this.ais) {
+      const rx = P.x - a.x, rz = P.z - a.z;
+      if (rx * rx + rz * rz > 36) continue;
+      const fx = Math.sin(a.h), fz = Math.cos(a.h), sx = Math.cos(a.h), sz = -Math.sin(a.h);
+      const lx = rx * fx + rz * fz, ly = rx * sx + rz * sz;
+      const penX = 4.3 - Math.abs(lx), penY = 1.95 - Math.abs(ly);
+      if (penX > 0 && penY > 0) {
+        let nx, nz, pen;
+        if (penX < penY) { nx = fx * sgn(lx); nz = fz * sgn(lx); pen = penX; } else { nx = sx * sgn(ly); nz = sz * sgn(ly); pen = penY; }
+        P.x += nx * pen; P.z += nz * pen;
+        const vrel = (P.vx - fx * a.v) * nx + (P.vz - fz * a.v) * nz;
+        if (vrel < 0) { P.vx -= nx * vrel * 1.15; P.vz -= nz * vrel * 1.15; if (-vrel > 3) { ChaseCam.shake = Math.min(1, ChaseCam.shake + -vrel * 0.05); HUD.flash(); } }
+      }
+    }
+  },
+
+  rank() {
+    const all = [this.player, ...this.ais];
+    const fin = this.finishOrder;
+    const rest = all.filter((c) => fin.indexOf(c) < 0).sort((a, b) => this.progressOf(b) - this.progressOf(a));
+    const order = fin.concat(rest);
+    this.position = order.indexOf(this.player) + 1;
+    this.order = order;
+  },
+
+  showResults() {
+    this.state = 'results';
+    UI.showResults();
+  }
+};
+
+/* =====================================================================
+   HUD
+   ===================================================================== */
+const HUD = (function () {
+  const el = { pos: $('h-pos'), lap: $('h-lap'), cp: $('h-cp'), time: $('h-time'), laps: $('h-laps'), num: $('sp-num'), fg: $('sp-fg'), bg: $('sp-bg'), msg: $('msg'), toast: $('toast'), mini: $('mini') };
+  const cache = {};
+  const set = (k, node, v) => { if (cache[k] !== v) { cache[k] = v; node.textContent = v; } };
+
+  const fmt = (t) => { t = Math.max(0, t); const m = Math.floor(t / 60), s = t - m * 60; return m + ':' + (s < 10 ? '0' : '') + s.toFixed(3); };
+
+  // speedometer arc (270 degrees, 0..300 km/h)
+  const arc = (r, cx, cy) => {
+    const a0 = (135 * Math.PI) / 180, a1 = (405 * Math.PI) / 180;
+    const p = (a) => [(cx + r * Math.cos(a)).toFixed(2), (cy + r * Math.sin(a)).toFixed(2)];
+    const s = p(a0), e = p(a1);
+    return 'M' + s[0] + ' ' + s[1] + ' A' + r + ' ' + r + ' 0 1 1 ' + e[0] + ' ' + e[1];
+  };
+  const d = arc(54, 70, 62);
+  el.bg.setAttribute('d', d); el.fg.setAttribute('d', d);
+
+  // minimap
+  const mctx = el.mini.getContext('2d');
+  const stat = document.createElement('canvas'); stat.width = 128; stat.height = 128;
+  let mapS = 1, mapX = 0, mapZ = 0;
+  (function drawStatic() {
+    const T = Track; let a = 1e9, b = -1e9, c = 1e9, e = -1e9;
+    for (let i = 0; i < T.N; i++) { a = Math.min(a, T.X[i]); b = Math.max(b, T.X[i]); c = Math.min(c, T.Z[i]); e = Math.max(e, T.Z[i]); }
+    mapS = 108 / Math.max(b - a, e - c); mapX = (128 - (b - a) * mapS) / 2 - a * mapS; mapZ = (128 - (e - c) * mapS) / 2 - c * mapS;
+    const g = stat.getContext('2d');
+    g.lineJoin = 'round'; g.lineCap = 'round';
+    const path = () => { g.beginPath(); for (let i = 0; i <= T.N; i++) { const k = i % T.N, x = T.X[k] * mapS + mapX, y = T.Z[k] * mapS + mapZ; i ? g.lineTo(x, y) : g.moveTo(x, y); } };
+    g.strokeStyle = 'rgba(255,255,255,.22)'; g.lineWidth = 7; path(); g.stroke();
+    g.strokeStyle = 'rgba(20,26,36,.95)'; g.lineWidth = 4.5; path(); g.stroke();
+    const x0 = T.X[0] * mapS + mapX, y0 = T.Z[0] * mapS + mapZ;
+    g.fillStyle = '#fff'; g.fillRect(x0 - 4, y0 - 1.2, 8, 2.4);
+  })();
+  const dots = [0x2f6fed, 0xf2f2f2, 0x1fb26b, 0xf28a1a].map((h) => '#' + h.toString(16).padStart(6, '0'));
+
+  let flashT = 0;
+  return {
+    fmt,
+    show(v) { $('hud').hidden = !v; },
+    showMsg(t, go) { el.msg.textContent = t; el.msg.className = go ? 'go' : ''; },
+    toast(t, warn) {
+      el.toast.textContent = t; el.toast.className = warn ? 'warn' : '';
+      void el.toast.offsetWidth; el.toast.className += ' show';
+    },
+    flash() { flashT = 0.2; },
+    update() {
+      const R = Race, P = R.player;
+      set('pos', el.pos, R.position + '/' + (CFG.aiCount + 1));
+      set('lap', el.lap, R.lap() + '/' + CFG.laps);
+      set('cp', el.cp, (R.cpInLap()) + '/' + GATES);
+      set('time', el.time, fmt(R.t));
+      let laps = ' ';
+      if (R.lapTimes.length) {
+        const best = Math.min.apply(null, R.lapTimes);
+        laps = 'Last ' + fmt(R.lapTimes[R.lapTimes.length - 1]) + '  Best ' + fmt(best);
+      } else if (R.state === 'racing') laps = 'Lap ' + fmt(R.t - R.lapStart);
+      set('laps', el.laps, laps);
+      const kmh = Math.round(P.speed * 3.6);
+      set('spd', el.num, String(kmh));
+      const frac = clamp(kmh / 300, 0, 1);
+      const off = (100 - frac * 100).toFixed(1);
+      if (cache.off !== off) { cache.off = off; el.fg.setAttribute('stroke-dashoffset', off); el.fg.style.stroke = frac > 0.86 ? 'var(--hot)' : 'var(--accent)'; }
+      if (R.wrongWayT > 0.8) { if (!cache.ww) { cache.ww = 1; this.toast('Wrong way - press R to reset', true); } } else cache.ww = 0;
+
+      // minimap
+      mctx.clearRect(0, 0, 128, 128);
+      mctx.drawImage(stat, 0, 0);
+      R.ais.forEach((a, i) => { mctx.fillStyle = dots[i]; mctx.beginPath(); mctx.arc(a.x * mapS + mapX, a.z * mapS + mapZ, 3, 0, TAU); mctx.fill(); });
+      mctx.fillStyle = '#ffb21a'; mctx.strokeStyle = '#fff'; mctx.lineWidth = 1.5;
+      mctx.beginPath(); mctx.arc(P.x * mapS + mapX, P.z * mapS + mapZ, 4, 0, TAU); mctx.fill(); mctx.stroke();
+    }
+  };
+})();
+
+/* =====================================================================
+   UI panels, pause, touch toggle
+   ===================================================================== */
+const isTouch = matchMedia('(pointer:coarse)').matches || 'ontouchstart' in window;
+const UI = {
+  touchOn: isTouch,
+  panels: { start: $('p-start'), pause: $('p-pause'), results: $('p-results') },
+  show(name) {
+    $('overlay').hidden = !name;
+    for (const k in this.panels) this.panels[k].hidden = k !== name;
+  },
+  setTouch(on) {
+    this.touchOn = on;
+    $('touch').classList.toggle('on', on);
+    const t = 'Touch buttons: ' + (on ? 'on' : 'off');
+    $('b-touch1').textContent = t; $('b-touch2').textContent = t;
+    if (!on) for (const k in Input.touch) Input.touch[k] = false;
+  },
+  start() { this.show(null); HUD.show(true); Race.begin(); },
+  pause() {
+    if (!(Race.state === 'countdown' || Race.state === 'racing' || Race.state === 'finishing')) return;
+    Race.prevState = Race.state; Race.state = 'paused'; Input.keys.clear();
+    for (const k in Input.touch) Input.touch[k] = false;
+    this.show('pause');
+  },
+  resume() { if (Race.state !== 'paused') return; Race.state = Race.prevState; this.show(null); },
+  restart() { this.show(null); HUD.show(true); HUD.showMsg(''); Race.begin(); },
+  showResults() {
+    const R = Race, n = R.finalPos || R.position;
+    const suf = (n % 100 >= 11 && n % 100 <= 13) ? 'th' : ['th', 'st', 'nd', 'rd', 'th', 'th', 'th', 'th', 'th', 'th'][n % 10];
+    $('r-pos').textContent = n + suf;
+    const total = R.lapTimes.reduce((a, b) => a + b, 0);
+    $('r-sub').textContent = 'Total time ' + HUD.fmt(total) + ' · ' + (n === 1 ? 'You won.' : 'Position ' + n + ' of ' + (CFG.aiCount + 1));
+    const best = Math.min.apply(null, R.lapTimes);
+    $('r-laps').innerHTML = R.lapTimes.map((t, i) => '<tr class="' + (t === best ? 'best' : '') + '"><td>Lap ' + (i + 1) + (t === best ? ' · best' : '') + '</td><td>' + HUD.fmt(t) + '</td></tr>').join('');
+    this.show('results');
+  }
+};
+$('b-start').addEventListener('click', () => UI.start());
+$('b-resume').addEventListener('click', () => UI.resume());
+$('b-restart').addEventListener('click', () => UI.restart());
+$('b-again').addEventListener('click', () => UI.restart());
+$('b-pause').addEventListener('click', () => UI.pause());
+$('b-reset').addEventListener('click', () => { if (Race.state === 'racing' || Race.state === 'countdown') Race.resetPlayer(); });
+$('b-touch1').addEventListener('click', () => UI.setTouch(!UI.touchOn));
+$('b-touch2').addEventListener('click', () => UI.setTouch(!UI.touchOn));
+
+// keyboard
+const BLOCK = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space']);
+window.addEventListener('keydown', (e) => {
+  if (BLOCK.has(e.code)) e.preventDefault();
+  if (e.repeat) return;
+  Input.keys.add(e.code);
+  if (e.code === 'Escape' || e.code === 'KeyP') { Race.state === 'paused' ? UI.resume() : UI.pause(); }
+  else if (e.code === 'KeyR') { if (Race.state === 'racing' || Race.state === 'countdown') Race.resetPlayer(); }
+  else if (e.code === 'Enter') {
+    if (!$('p-start').hidden) UI.start(); else if (!$('p-results').hidden) UI.restart(); else if (!$('p-pause').hidden) UI.resume();
+  }
+});
+window.addEventListener('keyup', (e) => Input.keys.delete(e.code));
+window.addEventListener('blur', () => { Input.keys.clear(); UI.pause(); });
+document.addEventListener('visibilitychange', () => { if (document.hidden) UI.pause(); });
+
+// touch buttons (multi-touch: each button tracks its own pointer)
+document.querySelectorAll('.tbtn').forEach((b) => {
+  const act = b.dataset.act;
+  b.addEventListener('pointerdown', (e) => { e.preventDefault(); try { b.setPointerCapture(e.pointerId); } catch (_) {} Input.touch[act] = true; b.classList.add('down'); });
+  const up = () => { Input.touch[act] = false; b.classList.remove('down'); };
+  ['pointerup', 'pointercancel', 'lostpointercapture'].forEach((ev) => b.addEventListener(ev, up));
+  b.addEventListener('contextmenu', (e) => e.preventDefault());
+});
+
+/* =====================================================================
+   Main loop: fixed-step physics, interpolated rendering
+   ===================================================================== */
+Race.init();
+UI.setTouch(isTouch);
+UI.show('start');
+
+let last = performance.now(), acc = 0, camOrbit = 0;
+const GATE_TINT_NEXT = [1, 0.7, 0.1], GATE_TINT = [0.2, 0.8, 1.0];
+function frame(now) {
+  requestAnimationFrame(frame);
+  const dt = Math.min(0.1, (now - last) / 1000); last = now;
+  const st = Race.state;
+  const simulating = st === 'countdown' || st === 'racing' || st === 'finishing' || st === 'results';
+  if (simulating) {
+    acc += dt; let n = 0;
+    while (acc >= CFG.fixedDt && n < 6) { Race.update(CFG.fixedDt); acc -= CFG.fixedDt; n++; }
+    if (n === 6) acc = 0;
+  }
+  const alpha = simulating ? acc / CFG.fixedDt : 1;
+  const P = Race.player;
+  if (st !== 'paused') {
+    P.render(alpha, dt);
+    for (const a of Race.ais) a.render(alpha);
+  }
+  const eye = ChaseCam.update(st === 'paused' ? 0 : dt, P.rx, P.rz, P.rh, P.speed, st === 'menu');
+  drawScene(eye, ChaseCam.target, ChaseCam.fov);
+  if (!$('hud').hidden) HUD.update();
+}
+
+function drawScene(eye, target, fov) {
+  Gfx.begin(eye, target, fov);
+  // sky first, centred on the camera, no depth
+  Gfx.draw(World.sky, M4.T(eye[0], 0, eye[2]), { unlit: true, fog: false, depth: false, depthWrite: false });
+  Gfx.draw(World.mountains, M4.IDENT, { unlit: true, fog: false });
+  Gfx.draw(World.ground, M4.IDENT);
+  Gfx.draw(World.road, M4.IDENT);
+  World.kerbs.forEach((m) => Gfx.draw(m, M4.IDENT, { layer: 1 }));
+  World.lines.forEach((m) => Gfx.draw(m, M4.IDENT, { layer: 2 }));
+  World.walls.forEach((m) => Gfx.draw(m, M4.IDENT));
+  Gfx.draw(World.trees, M4.IDENT);
+  Gfx.draw(World.stand, M4.IDENT);
+  const s0 = M4.model(Track.X[0], 0, Track.Z[0], Track.H[0], 0, 0);
+  Gfx.draw(World.startLine, s0, { layer: 3 });
+  Gfx.draw(World.gantry, s0);
+  const nextGate = Race.nextM % GATES;
+  for (let k = 1; k < GATES; k++) {
+    const i = Math.round((k * Track.N) / GATES) % Track.N;
+    Gfx.draw(World.gate, M4.model(Track.X[i], 0, Track.Z[i], Track.H[i], 0, 0), { unlit: true, mul: k === nextGate ? GATE_TINT_NEXT : GATE_TINT, layer: 3 });
+  }
+  for (const a of Race.ais) a.draw();
+  Race.player.draw();
+}
+requestAnimationFrame((t) => { last = t; frame(t); });
+
+window.__apex = { Race, Track, Input, CFG, CAR, UI, ChaseCam };
+})();
+</script>
+</body></html>
